@@ -28,17 +28,16 @@ class SimpleCNN(nn.Module):
     """
     Model definition
     """
-    def __init__(self, num_classes=10, inp_size=28, c_dim=1):
+    def __init__(self, num_classes=10, inp_size=64, c_dim=3):
         super().__init__()
         self.num_classes = num_classes
-        self.conv1 = nn.Conv2d(c_dim, 32, 5, padding=2)
-        self.conv2 = nn.Conv2d(32, 64, 5, padding=2)
+        self.conv1 = nn.Conv2d(in_channels=c_dim, out_channels=32, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5, padding=2)
         self.nonlinear = nn.ReLU()
-        self.pool1 = nn.AvgPool2d(2, 2)
-        self.pool2 = nn.AvgPool2d(2, 2)
+        self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
 
-        # TODO set the correct dim here
-        self.flat_dim = None
+        self.flat_dim = 64 * (inp_size // 4) * (inp_size // 4)
 
         # Sequential is another way of chaining the layers.
         self.fc1 = nn.Sequential(*get_fc(self.flat_dim, 128, 'none'))
@@ -51,15 +50,15 @@ class SimpleCNN(nn.Module):
         """
 
         N = x.size(0)
-        x = self.conv1(x)
-        x = self.nonlinear(x)
-        x = self.pool1(x)
+        x = self.conv1(x)  # (N, 32, H, W)
+        x = self.nonlinear(x)  # (N, 32, H, W)
+        x = self.pool1(x)  # (N, 32, H/2, W/2)
 
-        x = self.conv2(x)
-        x = self.nonlinear(x)
-        x = self.pool2(x)
+        x = self.conv2(x)  # (N, 64, H/2, W/2)
+        x = self.nonlinear(x)  # (N, 64, H/2, W/2)
+        x = self.pool2(x)  # (N, 64, H/4, W/4)
 
         flat_x = x.view(N, self.flat_dim)
-        out = self.fc1(flat_x)
-        out = self.fc2(out)
+        out = self.fc1(flat_x)  # (N, 128)
+        out = self.fc2(out)  # (N, Nc)
         return out

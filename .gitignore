@@ -175,3 +175,7 @@ cython_debug/
 
 .DS_Store
 .vscode/
+**/data/
+**/__pycache__/
+
+hw1-classfication-and-detection/runs/

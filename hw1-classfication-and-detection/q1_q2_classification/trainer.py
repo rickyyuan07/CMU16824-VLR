@@ -40,7 +40,7 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
             data, target, wgt = data.to(args.device), target.to(args.device), wgt.to(args.device)
 
             optimizer.zero_grad()
-            output = model(data)
+            output = model(data)  # (N, 20)
 
             ##################################################################
             # TODO: Implement a suitable loss function for multi-label
@@ -53,32 +53,42 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
             # Function Outputs:
             #   - `output`: Computed loss, a single floating point number
             ##################################################################
-            loss = 0
+            # After sigmoid sigmoid(Z) = 1 / (1 + exp(-Z)) = y_pred
+            # loss_matrix = - [ y * log(y_pred) + (1 - y) * log(1 - y_pred) ]  ==>  log(1 + exp(z)) - y * z
+            # logsumexp trick: log(1 + exp(z)) = max(0, z) + log(1 + exp(-abs(z)))
+            # Numerically stable BCE
+            loss_matrix = torch.clamp(output, min=0) - output * target + torch.log1p(torch.exp(-torch.abs(output)))
+
+            # Apply weights (ignore difficult=1)
+            loss_matrix = loss_matrix * wgt
+
+            # Average
+            loss = loss_matrix.sum() / wgt.sum()
             ##################################################################
             #                          END OF YOUR CODE                      #
             ##################################################################
-            
+
             loss.backward()
-            
+
             if cnt % args.log_every == 0:
                 writer.add_scalar("Loss/train", loss.item(), cnt)
-                print('Train Epoch: {} [{} ({:.0f}%)]\tLoss: {:.6f}'.format(epoch, cnt, 100. * batch_idx / len(train_loader), loss.item()))
-                
+                print(f'Train Epoch: {epoch} [{cnt} ({100 * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
+
                 # Log gradients
                 for tag, value in model.named_parameters():
                     if value.grad is not None:
                         writer.add_histogram(tag + "/grad", value.grad.cpu().numpy(), cnt)
 
             optimizer.step()
-            
+
             # Validation iteration
             if cnt % args.val_every == 0:
                 model.eval()
-                ap, map = utils.eval_dataset_map(model, args.device, test_loader)
-                print("map: ", map)
-                writer.add_scalar("map", map, cnt)
+                ap, mAP = utils.eval_dataset_map(model, args.device, test_loader)
+                print("mAP: ", mAP)
+                writer.add_scalar("mAP", mAP, cnt)
                 model.train()
-            
+
             cnt += 1
 
         if scheduler is not None:
@@ -91,5 +101,5 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
 
     # Validation iteration
     test_loader = utils.get_data_loader('voc', train=False, batch_size=args.test_batch_size, split='test', inp_size=args.inp_size)
-    ap, map = utils.eval_dataset_map(model, args.device, test_loader)
-    return ap, map
+    ap, mAP = utils.eval_dataset_map(model, args.device, test_loader)
+    return ap, mAP

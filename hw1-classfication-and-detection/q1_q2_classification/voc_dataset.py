@@ -49,12 +49,13 @@ class VOCDataset(Dataset):
     def preload_anno(self):
         """
         :return: a list of labels. each element is in the form of [class, weight],
-         where both class and weight are a numpy array in shape of [20],
+         where both class and weight are a numpy array in shape of [20].
         """
         label_list = []
         for index in self.index_list:
             fpath = os.path.join(self.ann_dir, index + '.xml')
             tree = ET.parse(fpath)
+            root = tree.getroot()
             
             #######################################################################
             # TODO: Insert your code here to preload labels
@@ -71,6 +72,15 @@ class VOCDataset(Dataset):
             # The weight vector should be a 20-dimensional vector with weight[i] = 0 iff an object of class i has the `difficult` attribute set to 1 in the XML file and 1 otherwise
             # The difficult attribute specifies whether a class is ambiguous and by setting its weight to zero it does not contribute to the loss during training 
             weight_vec = torch.ones(20)
+
+            for obj in root.findall('object'):
+                class_name = obj.find("name").text.lower().strip()
+                class_idx = self.get_class_index(class_name)
+                class_vec[class_idx] = 1
+
+                difficult = int(obj.find('difficult').text)
+                if difficult == 1:
+                    weight_vec[class_idx] = 0
 
             ######################################################################
             #                            END OF YOUR CODE                        #
@@ -92,7 +102,15 @@ class VOCDataset(Dataset):
         # change and you will have to write the correct value of `flat_dim`
         # in line 46 in simple_cnn.py
         ######################################################################
-        pass
+        if self.split == 'test':
+            return []
+        transform_list = [
+            transforms.RandomResizedCrop(self.size, scale=(0.8, 1.0)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(15),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+        ]
+        return transform_list
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
@@ -111,8 +129,8 @@ class VOCDataset(Dataset):
         img = Image.open(fpath)
 
         trans = transforms.Compose([
-            transforms.Resize(self.size),
             *self.get_random_augmentations(),
+            transforms.Resize((self.size, self.size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.457, 0.407], std=[0.229, 0.224, 0.225]),
         ])
