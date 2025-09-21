@@ -198,4 +198,4 @@ class TestDetectorBackboneWithFPN(unittest.TestCase):
         self.assertAlmostEqual(diff_mean.cpu().numpy(), 0, places=4)
     
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
