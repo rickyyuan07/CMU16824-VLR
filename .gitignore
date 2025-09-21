@@ -179,3 +179,4 @@ cython_debug/
 **/__pycache__/
 
 hw1-classfication-and-detection/runs/
+hw1-classfication-and-detection/checkpoint-model-epoch10.pth
