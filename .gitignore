@@ -181,3 +181,4 @@ cython_debug/
 hw1-classfication-and-detection/runs/
 hw1-classfication-and-detection/checkpoint-model-epoch10.pth
 hw1-classfication-and-detection/detection/detection_logs/
+hw1-classfication-and-detection/detection/fcos_detector.pt

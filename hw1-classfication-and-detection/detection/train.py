@@ -207,7 +207,7 @@ def main(args):
             dtype=torch.float32,
             output_dir="mAP/input",
         )
-        os.system("cd mAP && python main.py")
+        os.system("cd mAP && python main.py -na")
         print("Output file written to ./mAP/output/mAP.png")
         
 
