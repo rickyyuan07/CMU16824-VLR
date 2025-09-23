@@ -177,6 +177,7 @@ cython_debug/
 .vscode/
 **/data/
 **/__pycache__/
+**/*.zip
 
 hw1-classfication-and-detection/runs/
 hw1-classfication-and-detection/checkpoint-model-epoch10.pth
