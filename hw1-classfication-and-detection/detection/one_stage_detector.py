@@ -449,7 +449,7 @@ class FCOS(nn.Module):
             matched_gt_deltas[pos_mask],
             reduction="none",
         )  # (num_pos_locations, 4)
-        loss_box = loss_box * 0.15  # To balance the box loss with other losses
+        loss_box = loss_box * 0.25  # Multiply with 0.25 to average across four LTRB components.
 
         # Centerness loss: Binary cross-entropy loss
         gt_centerness_list = []
