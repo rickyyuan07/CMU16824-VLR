@@ -17,7 +17,19 @@ def compute_discriminator_loss(
     # Do not use discrim_interp, interp, lamb. They are placeholders
     # for Q1.5.
     ##################################################################
-    loss = None
+    # Original GAN discriminator loss: -E[log(D(x))] - E[log(1 - D(G(z)))]
+    # We want to maximize log(D(x)) + log(1 - D(G(z)))
+    # So we minimize the negative: minimize -log(D(x)) - log(1 - D(G(z)))
+    # Using BCE: -log(sigmoid(x)) for real (label 1), -log(1-sigmoid(x)) for fake (label 0)
+    # Since discriminator outputs logits, we use binary cross entropy with logits
+    # ref: https://neptune.ai/blog/gan-loss-functions
+    loss_real = F.binary_cross_entropy_with_logits(
+        discrim_real, torch.ones_like(discrim_real)
+    )
+    loss_fake = F.binary_cross_entropy_with_logits(
+        discrim_fake, torch.zeros_like(discrim_fake)
+    )
+    loss = loss_real + loss_fake
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -28,7 +40,13 @@ def compute_generator_loss(discrim_fake):
     ##################################################################
     # TODO 1.3: Implement GAN loss for the generator.
     ##################################################################
-    loss = None
+    # Original GAN generator loss: minimize -E[log(D(G(z)))]
+    # Equivalently: maximize E[log(D(G(z)))]
+    # We want discriminator to output high values (close to 1) for fake images
+    # So we use BCE with target = 1
+    loss = F.binary_cross_entropy_with_logits(
+        discrim_fake, torch.ones_like(discrim_fake)
+    )
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################

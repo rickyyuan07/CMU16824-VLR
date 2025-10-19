@@ -12,7 +12,8 @@ from torchvision.datasets import VisionDataset
 def build_transforms():
     # 1. Convert input image to tensor.
     # 2. Rescale input image from [0., 1.] to be between [-1., 1.].
-    rescaling = lambda x: (x - 0.5) * 2.0
+    def rescaling(x):
+        return x * 2.0 - 1.0
     ds_transforms = transforms.Compose([transforms.ToTensor(), rescaling])
     return ds_transforms
 
@@ -28,8 +29,13 @@ def get_optimizers_and_schedulers(gen, disc):
     # The learning rate for the generator should be decayed to 0 over
     # 100K iterations.
     ##################################################################
-    scheduler_discriminator = None
-    scheduler_generator = None
+    # Linear decay of learning rate to zero
+    scheduler_discriminator = torch.optim.lr_scheduler.LinearLR(
+        optim_discriminator, start_factor=1.0, end_factor=0.0, total_iters=500000
+    )
+    scheduler_generator = torch.optim.lr_scheduler.LinearLR(
+        optim_generator, start_factor=1.0, end_factor=0.0, total_iters=100000
+    )
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -91,7 +97,7 @@ def train_model(
     iters = 0
     fids_list = []
     iters_list = []
-    pbar = tqdm(total = num_iterations)
+    pbar = tqdm(total=num_iterations)
     while iters < num_iterations:
         for train_batch in train_loader:
             with torch.cuda.amp.autocast(enabled=amp_enabled):
@@ -105,8 +111,12 @@ def train_model(
                 # 2. Compute discriminator output on the train batch.
                 # 3. Compute the discriminator output on the generated data.
                 ##################################################################
-                discrim_real = None
-                discrim_fake = None
+                # Generate fake images with batch size matching real images
+                fake_images = gen(n_samples=train_batch.shape[0])
+                # Discriminator on real images
+                discrim_real = disc(train_batch)
+                # Discriminator on fake images (detach to avoid backprop through generator)
+                discrim_fake = disc(fake_images.detach())
                 ##################################################################
                 #                          END OF YOUR CODE                      #
                 ##################################################################
@@ -136,8 +146,10 @@ def train_model(
                     # TODO 1.2: Compute generator and discriminator output on
                     # generated data.
                     ###################################################################
-                    fake_batch = None
-                    discrim_fake = None
+                    # Generate fake batch
+                    fake_batch = gen(n_samples=batch_size)
+                    # Discriminator output on fake batch (no detach - we want gradients)
+                    discrim_fake = disc(fake_batch)
                     ##################################################################
                     #                          END OF YOUR CODE                      #
                     ##################################################################
@@ -156,7 +168,10 @@ def train_model(
                         # TODO 1.2: Generate samples using the generator.
                         # Make sure they lie in the range [0, 1]!
                         ##################################################################
-                        generated_samples = None
+                        # Generate samples (output is in [-1, 1] due to Tanh)
+                        # Rescale to [0, 1] for visualization
+                        generated_samples = gen(n_samples=100)
+                        generated_samples = (generated_samples + 1) / 2  # [-1, 1] -> [0, 1]
                         ##################################################################
                         #                          END OF YOUR CODE                      #
                         ##################################################################
