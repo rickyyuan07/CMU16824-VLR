@@ -112,11 +112,12 @@ def train_model(
                 # 3. Compute the discriminator output on the generated data.
                 ##################################################################
                 # Generate fake images with batch size matching real images
-                fake_images = gen(n_samples=train_batch.shape[0])
+                # We detach here because we do not want to backprop through the generator
+                fake_images = gen(n_samples=train_batch.shape[0]).detach()
                 # Discriminator on real images
                 discrim_real = disc(train_batch)
-                # Discriminator on fake images (detach to avoid backprop through generator)
-                discrim_fake = disc(fake_images.detach())
+                # Discriminator on fake images
+                discrim_fake = disc(fake_images)
                 ##################################################################
                 #                          END OF YOUR CODE                      #
                 ##################################################################
@@ -125,8 +126,14 @@ def train_model(
                 # TODO 1.5 Compute the interpolated batch and run the
                 # discriminator on it.
                 ###################################################################
-                interp = None
-                discrim_interp = None
+                # Random interpolation coefficient between 0 and 1
+                alpha = torch.rand(train_batch.shape[0], 1, 1, 1).cuda()
+                alpha = alpha.expand_as(train_batch)  # shape: (batch_size, C, H, W)
+                # Interpolate between real and fake images
+                interp = alpha * train_batch + (1 - alpha) * fake_images
+                interp.requires_grad_(True)
+                # Run discriminator on interpolated data
+                discrim_interp = disc(interp)
                 ##################################################################
                 #                          END OF YOUR CODE                      #
                 ##################################################################

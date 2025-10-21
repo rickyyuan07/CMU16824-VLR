@@ -63,7 +63,7 @@ if __name__ == "__main__":
     train_model(
         gen,
         disc,
-        num_iterations=int(3e4),
+        num_iterations=int(20000),  # Early stopping for preventing FID explosion
         batch_size=256,
         prefix=prefix,
         gen_loss_fn=compute_generator_loss,
