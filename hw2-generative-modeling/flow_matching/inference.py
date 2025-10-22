@@ -17,7 +17,20 @@ def get_fid(gen, dataset_name, dataset_resolution, z_dimension, batch_size, num_
     # Hint: Refer to diffusion/inference.py
     # Note: The output must be in the range [0, 255]!
     ##################################################################
-    gen_fn = None
+    def gen_fn(z):
+        # z has shape (batch_size, z_dimension)
+        # Reshape z to image shape (batch_size, 3, 32, 32)
+        batch_size = z.shape[0]
+        img_shape = (batch_size, 3, dataset_resolution, dataset_resolution)
+        z_img = z.view(img_shape)
+        
+        # Sample from the flow model given z
+        samples = gen.sample_given_z(z_img, img_shape)
+        
+        # Convert from [0, 1] to [0, 255]
+        samples = (samples * 255).clamp(0, 255).to(torch.uint8)
+        
+        return samples
 
     ##################################################################
     #                          END OF YOUR CODE                      #

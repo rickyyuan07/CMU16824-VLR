@@ -33,7 +33,8 @@ class FlowModel(nn.Module):
         # First, prepare the time step t,
         # then pass x_t and the prepared t to the model.
         ##################################################################
-        pass
+        t_prepared = self._prepare_t(t)
+        return self.model(x_t, t_prepared)
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
@@ -46,7 +47,10 @@ class FlowModel(nn.Module):
         ##################################################################
         # TODO 4.1: Implement one Euler step of the ODE solver
         ##################################################################
-        pass
+        # Euler method: x_{k+1} = x_k + dt * v_theta(x_k, t_k)
+        v = self.forward(x, t)
+        x_next = x + dt * v
+        return x_next
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
@@ -73,8 +77,8 @@ class FlowModel(nn.Module):
         ##################################################################
         # TODO 4.1: Implement time grid and time step size,
         ##################################################################
-        ts = None
-        dt = None
+        ts = self._time_grid(steps)
+        dt = 1.0 / (steps - 1)
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
@@ -108,8 +112,8 @@ class FlowModel(nn.Module):
         # TODO 4.1: Implement time grid and time step size,
         # similar to sample() function above.
         ##################################################################
-        ts = None
-        dt = None
+        ts = self._time_grid(steps)
+        dt = 1.0 / (steps - 1)
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################

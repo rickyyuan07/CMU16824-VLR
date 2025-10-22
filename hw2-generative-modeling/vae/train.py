@@ -18,7 +18,9 @@ def ae_loss(model, x):
     ##################################################################
     # TODO 2.2: Fill in MSE loss between x and its reconstruction.
     ##################################################################
-    loss = None
+    z = model.encoder(x)
+    x_recon = model.decoder(z)
+    loss = F.mse_loss(x_recon, x, reduction='sum') / x.shape[0]
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -38,9 +40,25 @@ def vae_loss(model, x, beta = 1):
     # closed form, you can find the formula here:
     # (https://stats.stackexchange.com/questions/318748/deriving-the-kl-divergence-loss-for-vaes).
     ##################################################################
-    total_loss = None
-    recon_loss = None
-    kl_loss = None
+    # Encode to get mu and log_std
+    mu, log_std = model.encoder(x)
+    
+    # Reparameterization trick: z = mu + std * epsilon
+    std = torch.exp(log_std)
+    eps = torch.randn_like(std)
+    z = mu + std * eps
+    
+    x_recon = model.decoder(z)
+    recon_loss = F.mse_loss(x_recon, x, reduction='sum') / x.shape[0]
+    
+    # KL divergence loss (closed form for Gaussian)
+    # KL(N(mu, sigma) || N(0, 1)) = 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    # Using log_std: = 0.5 * sum(1 + 2*log_std - mu^2 - exp(2*log_std))
+    kl_loss = -0.5 * torch.sum(1 + 2 * log_std - mu.pow(2) - torch.exp(2 * log_std))
+    kl_loss = kl_loss / x.size(0)  # Average over batch
+    
+    # Total loss with beta weighting
+    total_loss = recon_loss + beta * kl_loss
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -58,7 +76,7 @@ def linear_beta_scheduler(max_epochs=None, target_val = 1):
     # linearly from 0 at epoch 0 to target_val at epoch max_epochs.
     ##################################################################
     def _helper(epoch):
-        pass
+        return min(target_val, (epoch / max_epochs) * target_val)
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
