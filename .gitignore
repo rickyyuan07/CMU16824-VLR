@@ -183,3 +183,4 @@ hw1-classfication-and-detection/runs/
 hw1-classfication-and-detection/checkpoint-model-epoch10.pth
 hw1-classfication-and-detection/detection/detection_logs/
 hw1-classfication-and-detection/detection/fcos_detector.pt
+hw3-vision-transformer/transformer_captioning/datasets/coco_captioning/

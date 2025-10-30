@@ -7,55 +7,53 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 class AttentionLayer(nn.Module):
-
     def __init__(self, embed_dim, dropout=0.1):
-       
         super().__init__()
         self.embed_dim = embed_dim
-        # TODO: Initialize the following layers and parameters to perform attention
+        # Initialize the following layers and parameters to perform attention
         # This class assumes that the input dimension for query, key and value is embed_dim
-        self.query_proj = ...
-        self.key_proj = ...
-        self.value_proj = ...
+        self.query_proj = nn.Linear(embed_dim, embed_dim)
+        self.key_proj = nn.Linear(embed_dim, embed_dim)
+        self.value_proj = nn.Linear(embed_dim, embed_dim)
+        self.dropout = nn.Dropout(dropout)
 
-        self.dropout = ...
-            
     def forward(self, query, key, value, attn_mask=None):
         N, S, D = query.shape
         N, T, D = value.shape
         assert key.shape == value.shape
-       
-        # TODO : Compute attention 
-    
-        #project query, key and value  - 
-        query = ...
-        key = ...
-        value = ...
+
+        # linear projections
+        query = self.query_proj(query)  # (N, S, D)
+        key = self.key_proj(key)      # (N, T, D)
+        value = self.value_proj(value)  # (N, T, D)
 
         #compute dot-product attention. Don't forget the scaling value!
-        #Expected shape of dot_product is (N, S, T)
-        dot_product = ...
+        # Expected shape of dot_product is (N, S, T)
+        scale = math.sqrt(D)
+        dot_product = torch.matmul(query, key.transpose(-2, -1)) / scale  # (N, S, T)
 
         if attn_mask is not None:
             # convert att_mask which is multiplicative, to an additive mask
             # Hint : If mask[i,j] = 0, we want softmax(QKT[i,j] + additive_mask[i,j]) to be 0
             # Think about what inputs make softmax 0.
-            additive_mask = ...
-            dot_product += additive_mask
-        
-        # apply softmax, dropout, and use value
-        y = ...
-        return y  
+            # attn_mask is multiplicative (1 keep, 0 mask). Convert to additive large negative.
+            additive_mask = (1.0 - attn_mask).to(dtype=dot_product.dtype, device=dot_product.device) * (-1e9)
+            if additive_mask.dim() == 2:
+                additive_mask = additive_mask.unsqueeze(0)
+            dot_product = dot_product + additive_mask
+
+        attn = torch.softmax(dot_product, dim=-1)
+        attn = self.dropout(attn)
+        out = torch.matmul(attn, value)  # (N, S, D)
+        return out
+
 
 class MultiHeadAttentionLayer(AttentionLayer):
-
     def __init__(self, embed_dim, num_heads, dropout=0.1):
-       
         super().__init__(embed_dim, dropout)
         self.num_heads = num_heads
-
-        # TODO: Initialize the following layers and parameters to perform attention
-        self.head_proj = ...
+        # Initialize the following layers and parameters to perform attention
+        self.head_proj = nn.Linear(embed_dim, embed_dim)
 
     def forward(self, query, key, value, attn_mask=None):
         H = self.num_heads
@@ -63,96 +61,121 @@ class MultiHeadAttentionLayer(AttentionLayer):
         N, T, D = value.shape
         assert key.shape == value.shape
 
-        # TODO : Compute multi-head attention
- 
-        #project query, key and value
-        #after projection, split the embedding across num_heads
-        #eg - expected shape for value is (N, H, T, D/H)
-        query = ...
-        key = ...
-        value = ...
+        # project query, key and value
+        # after projection, split the embedding across num_heads
+        # eg - expected shape for value is (N, H, T, D/H)
+        query = self.query_proj(query)
+        key = self.key_proj(key)
+        value = self.value_proj(value)
 
-        #compute dot-product attention separately for each head. Don't forget the scaling value!
-        #Expected shape of dot_product is (N, H, S, T)
-        dot_product = ...
+        assert D % H == 0, "embed_dim must be divisible by num_heads"
+        d_head = D // H
+
+        # reshape and permute to (N, H, S, d_head) etc.
+        query = query.view(N, S, H, d_head).permute(0, 2, 1, 3)  # (N, H, S, d_head)
+        key = key.view(N, T, H, d_head).permute(0, 2, 1, 3)  # (N, H, T, d_head)
+        value = value.view(N, T, H, d_head).permute(0, 2, 1, 3)  # (N, H, T, d_head)
+
+        # Compute dot-product attention separately for each head. Don't forget the scaling value!
+        # Expected shape of dot_product is (N, H, S, T)
+        scale = math.sqrt(d_head)
+        dot_product = torch.matmul(query, key.transpose(-2, -1)) / scale  # (N, H, S, T)
 
         if attn_mask is not None:
             # convert att_mask which is multiplicative, to an additive mask
             # Hint : If mask[i,j] = 0, we want softmax(QKT[i,j] + additive_mask[i,j]) to be 0
             # Think about what inputs make softmax 0.
-            additive_mask = ...
-            dot_product += additive_mask
-        
-        # apply softmax, dropout, and use value
-        y = ...
+            additive_mask = (1.0 - attn_mask).to(dtype=dot_product.dtype, device=dot_product.device) * (-1e9)
+            if additive_mask.dim() == 2:
+                additive_mask = additive_mask.unsqueeze(0).unsqueeze(0)
+            dot_product = dot_product + additive_mask
 
-        # concat embeddings from different heads, and project
-        output = ...
+        # Apply softmax, dropout, and use value
+        attn = torch.softmax(dot_product, dim=-1)  # (N, H, S, T)
+        attn = self.dropout(attn)
+        y = torch.matmul(attn, value)  # (N, H, S, d_head)
+
+        # Concatenate embeddings from different heads, and project
+        y = y.permute(0, 2, 1, 3).contiguous().view(N, S, D)
+        output = self.head_proj(y)
         return output
 
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim, dropout=0.1, max_len=5000):
         super().__init__()
-        # TODO - use torch.nn.Embedding to create the encoding. Initialize dropout layer.
-        self.encoding = ... 
-        self.dropout = ...
-      
+        # Use torch.nn.Embedding to create the encoding. Initialize dropout layer.
+        self.encoding = nn.Embedding(max_len, embed_dim)
+        self.dropout = nn.Dropout(dropout)
+
     def forward(self, x):
         N, S, D = x.shape
-        # TODO - add the encoding to x
-
-        output = x + ...
+        positions = torch.arange(S, device=x.device).unsqueeze(0).expand(N, S)
+        pos_emb = self.encoding(positions)  # (N, S, D)
+        output = x + pos_emb
         output = self.dropout(output)
-   
         return output
 
 
 class SelfAttentionBlock(nn.Module):
-
     def __init__(self, input_dim, num_heads, dropout=0.1):
         super().__init__()
-        # TODO: Initialize the following. Use MultiHeadAttentionLayer for self_attn.
-        self.self_attn = ...
-        self.dropout = ...
-        self.layernorm = ...
-       
+        # Initialize the following. Use MultiHeadAttentionLayer for self_attn.
+        self.self_attn = MultiHeadAttentionLayer(input_dim, num_heads, dropout)
+        self.dropout = nn.Dropout(dropout)
+        self.layernorm = nn.LayerNorm(input_dim)
+
     def forward(self, seq, mask):
-        ############# TODO - Self-attention on the sequence, using the mask. Add dropout to attention layer output.
-        # Then add a residual connection to the original input, and finally apply normalization. #############################
+        # Self-attention on the sequence, using the mask. Add dropout to attention layer output.
+        # Then add a residual connection to the original input, and finally apply normalization.
+        attn_out = self.self_attn(seq, seq, seq, attn_mask=mask)
+        attn_out = self.dropout(attn_out)
+        out = self.layernorm(seq + attn_out)
         return out
+
 
 class CrossAttentionBlock(nn.Module):
-
     def __init__(self, input_dim, num_heads, dropout=0.1):
         super().__init__()
-        # TODO: Initialize the following. Use MultiHeadAttentionLayer for cross_attn.
-        self.cross_attn = ...
-        self.dropout = ...
-        self.norm = ...
-       
+        # Initialize the following. Use MultiHeadAttentionLayer for cross_attn.
+        self.cross_attn = MultiHeadAttentionLayer(input_dim, num_heads, dropout)
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(input_dim)
+
     def forward(self, seq, cond):
-        ############# TODO - Cross-attention on the sequence, using conditioning. Add dropout to attention layer output.
-        # Then add a residual connection to the original input, and finally apply normalization. #############################
+        # Cross-attention on the sequence, using conditioning. Add dropout to attention layer output.
+        # Then add a residual connection to the original input, and finally apply normalization.
+        attn_out = self.cross_attn(seq, cond, cond, attn_mask=None)
+        attn_out = self.dropout(attn_out)
+        out = self.norm(seq + attn_out)
         return out
+
 
 class FeedForwardBlock(nn.Module):
-    def __init__(self, input_dim, num_heads, dim_feedforward=2048, dropout=0.1 ):
+    def __init__(self, input_dim, num_heads, dim_feedforward=2048, dropout=0.1):
         super().__init__()
-        # TODO: Initialize the following. 
-        # MLP has the following layers : linear, relu, dropout, linear ; hidden dim of linear is given by dim_feedforward
-        self.mlp = ...
-        self.dropout = ...
-        self.norm = ...
-       
+        # MLP: linear -> relu -> dropout -> linear
+        # hidden dim of linear is given by dim_feedforward
+        self.mlp = nn.Sequential(
+            nn.Linear(input_dim, dim_feedforward),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_feedforward, input_dim),
+        )
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(input_dim)
 
     def forward(self, seq):
-         ############# TODO - MLP on the sequence. Add dropout to mlp layer output.
-        # Then add a residual connection to the original input, and finally apply normalization. #############################
+        # MLP on the sequence. Add dropout to mlp layer output.
+        # Then add a residual connection to the original input, and finally apply normalization.
+        mlp_out = self.mlp(seq)
+        mlp_out = self.dropout(mlp_out)
+        out = self.norm(seq + mlp_out)
         return out
 
+
 class DecoderLayer(nn.Module):
-    def __init__(self, input_dim, num_heads, dim_feedforward=2048, dropout=0.1 ):
+    def __init__(self, input_dim, num_heads, dim_feedforward=2048, dropout=0.1):
         super().__init__()
         self.self_atn_block = SelfAttentionBlock(input_dim, num_heads, dropout)
         self.cross_atn_block = CrossAttentionBlock(input_dim, num_heads, dropout)
@@ -162,10 +185,11 @@ class DecoderLayer(nn.Module):
         out = self.self_atn_block(seq, mask)
         out = self.cross_atn_block(out, cond)
         return self.feedforward_block(out)
-       
+
+
 class TransformerDecoder(nn.Module):
     def __init__(self, word_to_idx, idx_to_word, input_dim, embed_dim, num_heads=4,
-                 num_layers=2, max_length=50, device = 'cuda'):
+                 num_layers=2, max_length=50, device='cuda'):
         """
         Construct a new TransformerDecoder instance.
         Inputs:
@@ -183,34 +207,43 @@ class TransformerDecoder(nn.Module):
         self._null = word_to_idx["<NULL>"]
         self._start = word_to_idx.get("<START>", None)
         self.idx_to_word = idx_to_word
-        
+
         self.layers = nn.ModuleList([DecoderLayer(embed_dim, num_heads) for _ in range(num_layers)])
-        
+
         self.caption_embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=self._null)
         self.positional_encoding = PositionalEncoding(embed_dim, max_len=max_length)
         self.feature_embedding = nn.Linear(input_dim, embed_dim)
-        self.score_projection = nn.Linear(embed_dim, vocab_size) 
+        self.score_projection = nn.Linear(embed_dim, vocab_size)
 
         self.apply(self._init_weights)
-        self.device = device 
+        self.device = device
         self.to(device)
 
     def get_data_embeddings(self, features, captions):
-        # TODO - get caption and feature embeddings 
+        # Get caption and feature embeddings
         # Don't forget position embeddings for captions!
         # expected caption embedding output shape : (N, T, D)
+        # features: (N, D_img) -> (N, 1, D)
+        feature_embedding = self.feature_embedding(features)  # (N, D)
+        feature_embedding = feature_embedding.unsqueeze(1)   # (N, 1, D)
 
         # Unsqueeze feature embedding along dimension 1
         # expected feature embedding output shape : (N, 1, D) 
+        # captions: (N, T) -> embedding + positional
+        caption_embedding = self.caption_embedding(captions)  # (N, T, D)
+        caption_embedding = self.positional_encoding(caption_embedding)
+
         return feature_embedding, caption_embedding
 
     def get_causal_mask(self, _len):
-        #TODO - get causal mask. This should be a matrix of shape (_len, _len). 
+        # Get causal mask. This should be a matrix of shape (_len, _len). 
         # This mask is multiplicative
         # setting mask[i,j] = 0 means jth element of the sequence is not used 
         # to predict the ith element of the sequence.
+        # multiplicative mask: 1 = visible, 0 = masked
+        mask = torch.tril(torch.ones((_len, _len), dtype=torch.float32))
         return mask
-                                      
+
     def forward(self, features, captions):
         """
         Given image features and caption tokens, return a distribution over the
@@ -225,7 +258,7 @@ class TransformerDecoder(nn.Module):
         features_embed, captions_embed = self.get_data_embeddings(features, captions)
         mask = self.get_causal_mask(captions_embed.shape[1])
         mask.to(captions_embed.dtype)
-        
+
         output = captions_embed
         for layer in self.layers:
             output = layer(output, features_embed, mask=mask)
@@ -280,5 +313,3 @@ class TransformerDecoder(nn.Module):
                 partial_caption = torch.cat([partial_caption, word], dim=1)
 
             return captions
-
-
