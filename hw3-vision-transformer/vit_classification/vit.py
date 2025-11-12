@@ -54,10 +54,14 @@ class ViT(nn.Module):
         self.num_classes = num_classes
         self.device = device
 
-        self.patch_embedding = None # TODO (Linear Layer that takes as input a patch and outputs a d_model dimensional vector)
-        self.positional_encoding = None # TODO (use the positional encoding from the transformer captioning solution)
-        self.fc = None # TODO (takes as input the embedding corresponding to the [CLS] token and outputs the logits for each class)
-        self.cls_token = None # TODO (learnable [CLS] token embedding)
+        # Linear Layer that takes as input a patch and outputs a d_model dimensional vector
+        self.patch_embedding = nn.Linear(patch_dim * patch_dim * 3, d_model)
+        # use the positional encoding from the transformer captioning solution
+        self.positional_encoding = PositionalEncoding(d_model, max_len=num_patches + 1)
+        # takes as input the embedding corresponding to the [CLS] token and outputs the logits for each class
+        self.fc = nn.Linear(d_model, num_classes)
+        # learnable [CLS] token embedding
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, d_model))
 
         self.layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
 
@@ -74,8 +78,15 @@ class ViT(nn.Module):
                 - patches: a FloatTensor of shape (N, num_patches, patch_dim x patch_dim x 3) giving a minibatch of patches    
         """
 
-        patches = None # TODO - Break images into a grid of patches
-        # Feel free to use pytorch built-in functions to do this
+        N, C, H, W = images.shape
+        patch_size = self.patch_dim
+        assert H % patch_size == 0 and W % patch_size == 0, "Image dimensions must be divisible by patch size"
+        h_patches = H // patch_size
+        w_patches = W // patch_size
+
+        patches = images.reshape(N, C, h_patches, patch_size, w_patches, patch_size)
+        patches = patches.permute(0, 2, 4, 1, 3, 5).contiguous()
+        patches = patches.view(N, h_patches * w_patches, C * patch_size * patch_size)
         
         return patches
 
@@ -91,15 +102,16 @@ class ViT(nn.Module):
         patches = self.patchify(images)
         patches_embedded = self.patch_embedding(patches)
         
-        output = None # TODO (append a CLS token to the beginning of the sequence of patch embeddings)
+        cls_tokens = self.cls_token.expand(images.size(0), -1, -1)
+        patches_embedded = torch.cat([cls_tokens, patches_embedded], dim=1)  # [64, 17, 256]
 
         output = self.positional_encoding(patches_embedded)
-        mask = None # TODO (generate a mask and feed it to the self-attention layer in ViT)
+        mask = torch.ones((self.num_patches + 1, self.num_patches + 1), device=self.device)  # [64, 17, 17]
 
         for layer in self.layers:
             output = layer(output, mask)
 
-        output = None # TODO (take the embedding corresponding to the [CLS] token and feed it through a linear layer to obtain the logits for each class)
+        output = self.fc(output[:, 0, :])
 
         return output
 
@@ -114,7 +126,3 @@ class ViT(nn.Module):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-
-
-

@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 from vit import ViT
 import os
 
@@ -49,9 +50,8 @@ class Trainer:
         """
 
         
-        # TODO - Compute cross entropy loss between predictions and labels. 
-        loss = None
-        
+        # Compute cross entropy loss between predictions and labels. 
+        loss = F.cross_entropy(predictions, labels)
 
         return loss
 
