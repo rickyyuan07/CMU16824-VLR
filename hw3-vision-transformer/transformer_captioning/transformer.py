@@ -151,26 +151,48 @@ class CrossAttentionBlock(nn.Module):
         return out
 
 
+# class FeedForwardBlock(nn.Module):
+#     def __init__(self, input_dim, num_heads, dim_feedforward=2048, dropout=0.1):
+#         super().__init__()
+#         # MLP: linear -> relu -> dropout -> linear
+#         # hidden dim of linear is given by dim_feedforward
+#         self.mlp = nn.Sequential(
+#             nn.Linear(input_dim, dim_feedforward),
+#             nn.ReLU(),
+#             # nn.SELU(),
+#             nn.Dropout(dropout),
+#             nn.Linear(dim_feedforward, input_dim),
+#         )
+#         self.dropout = nn.Dropout(dropout)
+#         self.norm = nn.LayerNorm(input_dim)
+
+#     def forward(self, seq):
+#         # MLP on the sequence. Add dropout to mlp layer output.
+#         # Then add a residual connection to the original input, and finally apply normalization.
+#         mlp_out = self.mlp(seq)
+#         mlp_out = self.dropout(mlp_out)
+#         out = self.norm(seq + mlp_out)
+#         return out
+
+# Updated FeedForwardBlock with SwiGLU activation
 class FeedForwardBlock(nn.Module):
     def __init__(self, input_dim, num_heads, dim_feedforward=2048, dropout=0.1):
         super().__init__()
-        # MLP: linear -> relu -> dropout -> linear
-        # hidden dim of linear is given by dim_feedforward
-        self.mlp = nn.Sequential(
-            nn.Linear(input_dim, dim_feedforward),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(dim_feedforward, input_dim),
-        )
+        
+        self.w1 = nn.Linear(input_dim, dim_feedforward)
+        self.w2 = nn.Linear(input_dim, dim_feedforward)
+        self.w3 = nn.Linear(dim_feedforward, input_dim)
+        
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(input_dim)
-
+        
     def forward(self, seq):
-        # MLP on the sequence. Add dropout to mlp layer output.
-        # Then add a residual connection to the original input, and finally apply normalization.
-        mlp_out = self.mlp(seq)
-        mlp_out = self.dropout(mlp_out)
-        out = self.norm(seq + mlp_out)
+        gate = F.silu(self.w1(seq))
+        data = self.w2(seq)
+        gated_output = gate * data
+        swiglu_out = self.w3(gated_output)
+        swiglu_out = self.dropout(swiglu_out)
+        out = self.norm(seq + swiglu_out)
         return out
 
 
