@@ -24,28 +24,12 @@ class Trainer(object):
         # Make sure to compute this loss only for indices where label is not the null token.
         # The loss should be averaged over batch and sequence dimensions.
         # predictions: (N, T, V), labels: (N, T)
-        N, T, V = predictions.shape
-        logits = predictions.reshape(-1, V)  # (N*T, V)
-        targets = labels.reshape(-1)         # (N*T,)
-
-        # per-position cross-entropy (no reduction)
-        per_pos_loss = F.cross_entropy(logits, targets, reduction="none")  # (N*T,)
-
-        # mask out NULL tokens in target
-        null_token = getattr(self.model, "_null", None)
-        if null_token is None:
-            # fall back to -1 (shouldn't happen for this assignment)
-            mask = targets != -1
-        else:
-            mask = targets != null_token
-
-        valid_count = mask.sum()
-        if valid_count.item() == 0:
-            # no valid positions: return zero that participates in the graph
-            return logits.sum() * 0.0
-
-        loss = (per_pos_loss * mask.to(per_pos_loss.dtype)).sum() / valid_count.to(per_pos_loss.dtype)
-        return loss
+        null = getattr(self.model, "_null", -1)
+        return F.cross_entropy(
+            predictions.transpose(1, 2),  # (N, V, T)
+            labels,
+            ignore_index=null
+        )
 
     def val(self):
         """
